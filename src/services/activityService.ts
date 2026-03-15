@@ -5,11 +5,25 @@ export function computeActivitySummary(activities: Activity[]): ActivitySummary 
   const totalTime = activities.reduce((acc, activity) => acc + (activity.moving_time ?? 0), 0)
   const runCount = activities.length
 
+  const runsWithPace = activities
+    .filter((a) => a.distance > 0)
+    .map((a) => ({
+      pace: a.moving_time / (a.distance / 1000),
+      date: a.start_date,
+    }))
+
+  const bestRun = runsWithPace.reduce<{ pace: number; date: string } | null>((best, current) => {
+    if (!best) return current
+    return current.pace < best.pace ? current : best
+  }, null)
+
   return {
     runCount,
     totalDistance,
     totalTime,
     avgPace: runCount > 0 ? totalTime / (totalDistance / 1000) : 0,
+    bestPace: bestRun ? bestRun.pace : 0,
+    bestPaceDate: bestRun ? bestRun.date : null,
   }
 }
 

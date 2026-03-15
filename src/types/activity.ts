@@ -16,4 +16,6 @@ export interface ActivitySummary {
   totalDistance: number
   totalTime: number
   avgPace: number
+  bestPace: number
+  bestPaceDate: string | null
 }

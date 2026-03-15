@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import RunCard from '../components/RunCard.vue'
 import StatsCard from '../components/StatsCard.vue'
 import { computeActivitySummary, mapToRunCardData } from '../services/activityService'
@@ -30,8 +30,22 @@ const monthOptions = computed(() => {
   return ['all', ...Array.from(months).sort((a, b) => b.localeCompare(a))]
 })
 
+const dataMonths = computed(() => monthOptions.value.length > 0 ? monthOptions.value.length - 1 : 0)
+
 const summary = computed(() => computeActivitySummary(filteredActivities.value))
-const runCardData = computed(() => mapToRunCardData(filteredActivities.value))
+const pageSize = 5
+const currentPage = ref(1)
+const totalPages = computed(() => Math.max(1, Math.ceil(filteredActivities.value.length / pageSize)))
+const pagedActivities = computed(() => {
+  const start = (currentPage.value - 1) * pageSize
+  return filteredActivities.value.slice(start, start + pageSize)
+})
+const runCardData = computed(() => mapToRunCardData(pagedActivities.value))
+
+watch(filteredActivities, () => {
+  currentPage.value = 1
+})
+
 const lastFetchedDays = computed(() => {
   if (!lastFetchedAt.value) return null
   const days = Math.floor((Date.now() - lastFetchedAt.value) / (1000 * 60 * 60 * 24))
@@ -90,15 +104,18 @@ async function fetchRuns(accessToken: string, bypassCache = false) {
   loading.value = true
   error.value = ''
   try {
-    const athlete = await fetchAthlete(accessToken)
-    athleteName.value = athlete?.firstname ? `${athlete.firstname} ${athlete.lastname ?? ''}`.trim() : 'Strava User'
-
     const cached = !bypassCache ? loadCache() : null
     if (cached) {
       activities.value = cached
+      const cachedName = localStorage.getItem('strava_athlete_name')
+      athleteName.value = cachedName || 'Strava User'
       loading.value = false
       return
     }
+
+    const athlete = await fetchAthlete(accessToken)
+    athleteName.value = athlete?.firstname ? `${athlete.firstname} ${athlete.lastname ?? ''}`.trim() : 'Strava User'
+    localStorage.setItem('strava_athlete_name', athleteName.value)
 
     const result = await fetchStravaActivities(accessToken)
     const runs = result.filter((act) => act.type === 'Run')
@@ -157,6 +174,16 @@ onMounted(async () => {
     return
   }
 
+  const cachedRuns = loadCache()
+  if (cachedRuns) {
+    activities.value = cachedRuns
+    const storedToken = localStorage.getItem('strava_token')
+    const cachedName = localStorage.getItem('strava_athlete_name')
+    if (storedToken) tokenInput.value = storedToken
+    athleteName.value = cachedName || 'Strava User'
+    return
+  }
+
   const storedToken = localStorage.getItem('strava_token')
   if (storedToken) {
     await fetchRuns(storedToken)
@@ -165,40 +192,67 @@ onMounted(async () => {
 </script>
 
 <template>
-  <section class="dashboard">
-    <h2>Running Analytics Dashboard</h2>
-    <p>เชื่อมต่อกับ Strava ด้วย OAuth code flow แล้วดึงกิจกรรมอัตโนมัติ</p>
+  <section class="dashboard max-w-4xl mx-auto px-4 py-6 sm:px-6">
+    <div v-motion="{ initial: { opacity: 0, y: 20 }, enter: { opacity: 1, y: 0, transition: { duration: 0.35 } } }" class="bg-white rounded-lg border border-slate-100 p-6 shadow-sm">
+      <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+        <div>
+          <h2 class="text-xl font-light text-slate-900">Running Analytics Dashboard</h2>
+          <p class="text-sm text-slate-500 mt-1">Connect with Strava to see your running metrics</p>
+        </div>
+        <div class="flex flex-wrap gap-2 items-center">
+          <button class="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-sm text-sm font-medium transition" @click="loginWithStrava" :disabled="loading">{{ loading ? 'Loading...' : 'Login with Strava' }}</button>
+          <button class="bg-slate-100 hover:bg-slate-200 text-slate-900 px-4 py-2 rounded-sm text-sm font-medium transition" @click="fetchRuns(tokenInput, true)" :disabled="loading || !tokenInput">Refresh</button>
+        </div>
+      </div>
 
-    <div class="actions">
-      <button class="login-btn" @click="loginWithStrava" :disabled="loading">{{ loading ? 'Loading...' : 'Login with Strava' }}</button>
-      <button class="refresh-btn" @click="fetchRuns(tokenInput, true)" :disabled="loading || !tokenInput">Refresh</button>
-      <select v-model="selectedMonth" class="month-select">
-        <option v-for="month in monthOptions" :key="month" :value="month">{{ month === 'all' ? 'ทุกเดือน' : month }}</option>
-      </select>
-    </div>
-    <div class="meta">
-      <p class="help">Login auto (code flow) และ refresh เท่าที่จำเป็น (เก็บข้อมูล 24 ชม.)</p>
-      <p class="help">ข้อมูลล่าสุด: <span v-if="lastFetchedAt">{{ lastFetchedDays === 0 ? 'วันนี้' : lastFetchedDays + ' วันก่อน' }}</span><span v-else>ยังไม่มีข้อมูล</span></p>
+      <div class="mt-4 pt-4 border-t border-slate-100 space-y-2">
+        <select v-model="selectedMonth" class="rounded-sm border border-slate-200 px-3 py-1.5 text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-slate-300">
+          <option v-for="month in monthOptions" :key="month" :value="month">{{ month === 'all' ? 'All months' : month }}</option>
+        </select>
+        <div class="text-xs text-slate-500 space-y-1">
+          <p>Last fetched: <span class="font-medium text-slate-700">{{ lastFetchedAt ? (lastFetchedDays === 0 ? 'Today' : lastFetchedDays + ' days ago') : 'No data' }}</span></p>
+          <p>Data spans: <span class="font-medium text-slate-700">{{ dataMonths }} months</span></p>
+        </div>
+      </div>
     </div>
     <p v-if="error" class="error">{{ error }}</p>
 
-    <div v-if="activities.length > 0">
-      <p class="user">Logged in as {{ athleteName }}</p>
-      <div class="stats-grid">
+    <div v-if="activities.length > 0" class="mt-8">
+      <p class="text-sm text-slate-600 mb-4">Logged in as <span class="font-semibold text-slate-900">{{ athleteName }}</span></p>
+      
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <StatsCard label="Total Runs" :value="summary.runCount" />
         <StatsCard label="Total Distance" :value="(summary.totalDistance / 1000).toFixed(2) + ' km'" />
         <StatsCard label="Total Time" :value="formatDuration(summary.totalTime)" />
-        <StatsCard label="Avg Pace" :value="formatPace(summary.totalTime, summary.totalDistance)" />
+        <div class="bg-slate-50 border border-slate-100 rounded-lg p-4">
+          <p class="text-xs text-slate-500 uppercase tracking-wider">Fastest Pace</p>
+          <p class="text-lg font-light text-slate-900 mt-2">{{ formatPace(summary.bestPace, 1000) }}</p>
+          <p class="text-xs text-slate-500 mt-1">{{ summary.bestPaceDate ? new Date(summary.bestPaceDate).toLocaleDateString() : 'No data' }}</p>
+        </div>
       </div>
 
-      <div class="run-list">
-        <h3>Recent Runs</h3>
-        <RunCard v-for="run in runCardData" :key="run.id" :run="run" />
+      <div class="bg-white rounded-lg border border-slate-100 p-6 shadow-sm">
+        <div class="mb-5">
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
+            <div>
+              <h3 class="text-lg font-light text-slate-900">Recent Runs</h3>
+              <p class="text-xs text-slate-500 mt-1">{{ pagedActivities.length }} activity · showing {{ (currentPage - 1) * pageSize + 1 }}–{{ Math.min(currentPage * pageSize, filteredActivities.length) }} of {{ filteredActivities.length }}</p>
+            </div>
+            <div class="flex gap-1 items-center text-xs">
+              <button class="px-2.5 py-1.5 rounded-sm border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition" :disabled="currentPage === 1" @click="currentPage = Math.max(1, currentPage - 1)">← Prev</button>
+              <span class="px-3 py-1.5 text-slate-600 font-medium">{{ currentPage }} / {{ totalPages }}</span>
+              <button class="px-2.5 py-1.5 rounded-sm border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition" :disabled="currentPage >= totalPages" @click="currentPage = Math.min(totalPages, currentPage + 1)">Next →</button>
+            </div>
+          </div>
+        </div>
+        <div class="space-y-2.5">
+          <RunCard v-for="run in runCardData" :key="run.id" :run="run" />
+        </div>
       </div>
     </div>
 
-    <div v-else class="empty-state">
-      <p>ยังไม่มีข้อมูลกิจกรรม ให้กด Login with Strava แล้วอนุญาต</p>
+    <div v-else class="mt-8 p-8 bg-slate-50 border border-slate-100 rounded-lg text-center">
+      <p class="text-slate-600">No activity yet. Click "Login with Strava" to get started.</p>
     </div>
   </section>
 </template>
