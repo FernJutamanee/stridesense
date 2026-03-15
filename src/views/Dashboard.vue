@@ -221,15 +221,39 @@ onMounted(async () => {
       <p class="text-sm text-slate-600 mb-4">Logged in as <span class="font-semibold text-slate-900">{{ athleteName }}</span></p>
       
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatsCard label="Total Runs" :value="summary.runCount" />
-        <StatsCard label="Total Distance" :value="(summary.totalDistance / 1000).toFixed(2) + ' km'" />
-        <StatsCard label="Total Time" :value="formatDuration(summary.totalTime)" />
-        <div class="bg-slate-50 border border-slate-100 rounded-lg p-4">
-          <p class="text-xs text-slate-500 uppercase tracking-wider">Fastest Pace</p>
-          <p class="text-lg font-light text-slate-900 mt-2">{{ formatPace(summary.bestPace, 1000) }}</p>
-          <p class="text-xs text-slate-500 mt-1">{{ summary.bestPaceDate ? new Date(summary.bestPaceDate).toLocaleDateString() : 'No data' }}</p>
-        </div>
-      </div>
+
+  <div class="bg-blue-50 border border-blue-100 rounded-xl p-4">
+    <p class="text-xs text-blue-600 uppercase tracking-wider">Total Runs</p>
+    <p class="text-2xl font-semibold text-blue-900 mt-2">
+      {{ summary.runCount }}
+    </p>
+  </div>
+
+  <div class="bg-purple-50 border border-purple-100 rounded-xl p-4">
+    <p class="text-xs text-purple-600 uppercase tracking-wider">Total Distance</p>
+    <p class="text-2xl font-semibold text-purple-900 mt-2">
+      {{ (summary.totalDistance / 1000).toFixed(2) }} km
+    </p>
+  </div>
+
+  <div class="bg-green-50 border border-green-100 rounded-xl p-4">
+    <p class="text-xs text-green-600 uppercase tracking-wider">Total Time</p>
+    <p class="text-2xl font-semibold text-green-900 mt-2">
+      {{ formatDuration(summary.totalTime) }}
+    </p>
+  </div>
+
+  <div class="bg-orange-50 border border-orange-100 rounded-xl p-4">
+    <p class="text-xs text-orange-600 uppercase tracking-wider">Fastest Pace</p>
+    <p class="text-2xl font-semibold text-orange-900 mt-2">
+      {{ formatPace(summary.bestPace, 1000) }}
+    </p>
+    <p class="text-xs text-orange-500 mt-1">
+      {{ summary.bestPaceDate ? new Date(summary.bestPaceDate).toLocaleDateString() : 'No data' }}
+    </p>
+  </div>
+
+</div>
 
       <div class="bg-white rounded-lg border border-slate-100 p-6 shadow-sm">
         <div class="mb-5">
